@@ -1,0 +1,22 @@
+name: SFTP Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Upload via SFTP
+      uses: pressidium/lftp-mirror-action@v1
+      with:
+        host: ${{ secrets.HOST_NAME }}
+        port: 55005
+        user: ${{ secrets.USERNAME }}
+        pass: ${{ secrets.PASSWORD }}
+        localDir: "./"
+        remoteDir: "/public_html/admin.rubabd.com/"
+        verbose: true
