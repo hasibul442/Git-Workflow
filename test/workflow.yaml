@@ -1,0 +1,45 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the main branch
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it.
+    - name: Checkout master
+      uses: actions/checkout@main
+
+    # Install doctl.
+    - name: Install doctl
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DO_TOKEN }}
+    
+    # Build a Docker image of your application in your registry and tag the image with the $GITHUB_SHA.
+
+    - name: Build container image
+      run: docker build -t registry.digitalocean.com/otithee/frontend:$(echo $GITHUB_SHA | head -c7) .
+
+    - name: Log in to DigitalOcean Container Registry with short-lived credentials
+      run: doctl registry login --expiry-seconds 1200
+
+    - name: Push image to DigitalOcean Container Registry
+      run: docker push registry.digitalocean.com/otithee/frontend:$(echo $GITHUB_SHA | head -c7)
+    
+    - name: Update deployment file
+      run: TAG=$(echo $GITHUB_SHA | head -c7) && sed -i 's|<IMAGE>|registry.digitalocean.com/otithee/frontend:'${TAG}'|' $GITHUB_WORKSPACE/k8s/deployment.yml
+    
+    - name: Save DigitalOcean kubeconfig with short-lived credentials
+      run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 otithee-k8s
+    
+    - name: Deploy to DigitalOcean Kubernetes
+      run: kubectl apply -f $GITHUB_WORKSPACE/k8s/deployment.yml
+    
+    - name: Verify deployment
+      run: kubectl rollout status deployment/frontend

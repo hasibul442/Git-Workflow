@@ -1,0 +1,40 @@
+name: Docker Build & Push to ECR
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region ap-southeast-1
+          
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin 590183767885.dkr.ecr.ap-southeast-1.amazonaws.com
+        
+      - name: Build and push Docker image
+        run: |
+          docker build -t 590183767885.dkr.ecr.ap-southeast-1.amazonaws.com/frontend:$(echo $GITHUB_SHA | head -c7) .
+          docker push 590183767885.dkr.ecr.ap-southeast-1.amazonaws.com/frontend:$(echo $GITHUB_SHA | head -c7)
+
+      - name: Update deployment file
+        run: TAG=$(echo $GITHUB_SHA | head -c7) && sed -i 's|<IMAGE>|590183767885.dkr.ecr.ap-southeast-1.amazonaws.com/frontend:'${TAG}'|' $GITHUB_WORKSPACE/k8s/deployment.yml
+
+      - name: Save AWS kubeconfig with short-lived credentials
+        run: aws eks --region ap-southeast-1 update-kubeconfig --name otithee
+      
+      - name: Deploy to AWS EKS
+        run: kubectl apply -f $GITHUB_WORKSPACE/k8s/deployment.yml
+        
+      
+      - name: Verify deployment
+        run: kubectl rollout status deployment/frontend
